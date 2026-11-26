@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мережа терміналів та депо — 13 точок</title>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
+
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        .custom-div-icon {
+            background: transparent;
+            border: none;
+        }
+
+        .marker-badge {
+            width: 32px;
+            height: 32px;
+            border-radius: 9999px;
+            border: 2.5px solid #ffffff;
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(15, 23, 42, 0.25);
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+            cursor: pointer;
+        }
+
+        .marker-badge:hover {
+            transform: scale(1.16);
+            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.32);
+        }
+
+        /* Кольори маркерів: Крайні (1, 13) - зелені, Проміжні (2-12) - індиго */
+        .marker-edge .marker-badge {
+            background-color: #059669; /* Emerald 600 */
+        }
+        .marker-mid .marker-badge {
+            background-color: #4f46e5; /* Indigo 600 */
+        }
+
+        /* Стан активного (вибраного) маркера */
+        .marker-active .marker-badge {
+            transform: scale(1.24);
+            box-shadow: 0 0 0 5px rgba(79, 70, 229, 0.28), 0 6px 16px rgba(15, 23, 42, 0.35);
+        }
+        .marker-edge.marker-active .marker-badge {
+            box-shadow: 0 0 0 5px rgba(5, 150, 105, 0.3), 0 6px 16px rgba(15, 23, 42, 0.35);
+        }
+
+        /* Оформлення спливаючих вікон Leaflet */
+        .leaflet-popup-content-wrapper {
+            border-radius: 14px;
+            padding: 0;
+            overflow: hidden;
+            box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.18), 0 4px 10px -2px rgba(15, 23, 42, 0.08);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+        }
+
+        .leaflet-popup-content {
+            margin: 0;
+            width: 260px !important;
+        }
+
+        .leaflet-popup-tip {
+            background: #ffffff;
+            box-shadow: 0 4px 8px rgba(15, 23, 42, 0.1);
+        }
+
+        .leaflet-container a.leaflet-popup-close-button {
+            top: 10px;
+            right: 10px;
+            color: #64748b;
+            font-size: 18px;
+            padding: 2px;
+        }
+        .leaflet-container a.leaflet-popup-close-button:hover {
+            color: #0f172a;
+        }
+
+        /* Делікатний скроллбар для сайдбару */
+        #sidebar-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        #sidebar-scroll::-webkit-scrollbar-track {
+            background: #f8fafc;
+        }
+        #sidebar-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        #sidebar-scroll::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="min-h-screen w-full bg-slate-100 text-slate-800 flex flex-col">
+
+    <!-- Верхня панель навігації сайту -->
+    <nav class="sticky top-0 z-[500] bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-sm">
+        <div class="flex items-center gap-2">
+            <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-indigo-600 text-white text-xs font-bold">13</span>
+            <span class="text-sm font-bold text-slate-900">Карта мережі локацій</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-xs font-semibold">
+            <a href="#map-section" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 transition-colors">Карта</a>
+            <a href="#points-section" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 transition-colors">Список точок</a>
+            <a href="#addresses-section" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 transition-colors">Список адрес</a>
+        </div>
+    </nav>
+
+    <!-- Основний блок: Карта + Довідник -->
+    <div id="map-section" class="flex-1 w-full flex flex-col md:flex-row min-h-[540px] md:h-[calc(100vh-53px)] md:overflow-hidden">
+
+        <!-- Ліва панель: Інтерактивна карта -->
+        <main class="relative w-full md:w-[68%] lg:w-[70%] h-[55vh] md:h-full order-1 flex-shrink-0">
+            <div id="map" class="w-full h-full z-0"></div>
+
+            <!-- Плаваюча панель керування стилем карти та скиданням виду -->
+            <div class="absolute top-3 right-3 z-[400] flex flex-col sm:flex-row items-end sm:items-center gap-2 pointer-events-auto">
+                <!-- Перемикач стилю карти -->
+                <div class="bg-white/95 backdrop-blur-md rounded-xl shadow-md border border-slate-200/80 p-1 flex items-center gap-1" role="group" aria-label="Стиль карти">
+                    <button id="btn-style-street" type="button"
+                            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-indigo-600 text-white shadow-sm">
+                        Вулиці
+                    </button>
+                    <button id="btn-style-gray" type="button"
+                            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-600 hover:bg-slate-100">
+                        Світла схема
+                    </button>
+                </div>
+
+                <!-- Кнопка скидання масштабу на карті -->
+                <button id="btn-map-reset" type="button"
+                        class="bg-white/95 backdrop-blur-md hover:bg-slate-50 active:scale-[0.98] text-slate-700 border border-slate-200/80 rounded-xl shadow-md px-3 py-2 text-xs font-semibold flex items-center gap-1.5 transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                    </svg>
+                    <span>Показати всі точки</span>
+                </button>
+            </div>
+
+            <!-- Легенда внизу ліворуч -->
+            <div class="hidden sm:flex absolute bottom-4 left-3 z-[400] bg-white/95 backdrop-blur-md rounded-xl shadow-md border border-slate-200/80 px-3.5 py-2 items-center gap-4 text-xs font-medium text-slate-600 pointer-events-auto">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-3 h-3 rounded-full bg-emerald-600 inline-block ring-2 ring-white shadow-sm"></span>
+                    <span>Крайні точки (1, 13)</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-3 h-3 rounded-full bg-indigo-600 inline-block ring-2 ring-white shadow-sm"></span>
+                    <span>Інші точки (2–12)</span>
+                </div>
+            </div>
+        </main>
+
+        <!-- Права панель: Довідник локацій -->
+        <aside id="points-section" class="w-full md:w-[32%] lg:w-[30%] h-[50vh] md:h-full order-2 bg-white border-t md:border-t-0 md:border-l border-slate-200 flex flex-col shadow-xl z-10">
+            <!-- Фіксований заголовок сайдбару -->
+            <header class="p-4 sm:p-5 border-b border-slate-200/80 bg-white flex-shrink-0">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <h1 class="text-base sm:text-lg font-bold text-slate-900 tracking-tight">Мережа терміналів та депо</h1>
+                        <p class="text-xs sm:text-sm font-medium text-slate-500 mt-0.5 flex items-center gap-1.5">
+                            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                            <span>13 локацій по Україні</span>
+                        </p>
+                    </div>
+
+                    <!-- Кнопка скидання виду -->
+                    <button id="btn-sidebar-reset" type="button" title="Показати всі точки"
+                            class="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200/80 active:scale-95 transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                        </svg>
+                        <span>Всі точки</span>
+                    </button>
+                </div>
+
+                <!-- Пошук по списку локацій -->
+                <div class="mt-3 relative">
+                    <input id="search-input" type="search" placeholder="Пошук за містом, депо або адресою..."
+                           class="w-full pl-8 pr-3 py-2 text-xs rounded-xl bg-slate-100/80 border border-slate-200/80 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400 absolute left-2.5 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
+                    </svg>
+                </div>
+
+                <!-- Панель дій: Копіювати посилання та Копіювати список адрес -->
+                <div class="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
+                    <button id="btn-share" type="button"
+                            class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                        </svg>
+                        <span>Копіювати посилання</span>
+                    </button>
+                    <button id="btn-copy-list" type="button"
+                            class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200/80 active:scale-[0.98] transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <span>Копіювати список адрес</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Прокручуваний список 13 точок -->
+            <div id="sidebar-scroll" class="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50/60"></div>
+        </aside>
+    </div>
+
+    <!-- Окремий блок зі списком усіх 13 адрес -->
+    <section id="addresses-section" class="w-full bg-white border-t border-slate-200 px-4 sm:px-6 py-6">
+        <div class="max-w-6xl mx-auto">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                    <h2 class="text-base sm:text-lg font-bold text-slate-900">Список усіх адрес (13 локацій)</h2>
+                    <p class="text-xs text-slate-500 mt-0.5">Натисніть на адресу, щоб перейти до точки на карті</p>
+                </div>
+                <button id="btn-copy-list-section" type="button"
+                        class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <span>Копіювати список адрес</span>
+                </button>
+            </div>
+            <div id="full-addresses-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5"></div>
+        </div>
+    </section>
+
+    <!-- Сповіщення (Toast) -->
+    <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none opacity-0 translate-y-2 transition-all duration-200">
+        <div class="bg-slate-900/95 backdrop-blur-md text-white text-xs font-medium px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <span id="toast-message">Скопійовано</span>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <script>
+        (function () {
+            'use strict';
+
+            const locations = [
+                {
+                    id: 1,
+                    city: 'Тернопіль',
+                    facility: 'Термінал (поштовий)',
+                    address: 'м. Тернопіль, Термінал (поштовий) вул. Микулинецька, 29',
+                    lat: 49.5186,
+                    lng: 25.6053
+                },
+                {
+                    id: 2,
+                    city: 'Чернівці',
+                    facility: 'Термінал (поштовий)',
+                    address: 'м. Чернівці, Термінал (вул. Руська, 248к)',
+                    lat: 48.2738,
+                    lng: 25.9866
+                },
+                {
+                    id: 3,
+                    city: 'Івано-Франківськ',
+                    facility: 'Термінал (поштовий)',
+                    address: 'м. Івано-Франківськ, Термінал (посилковий) (вул. Коновальця, 229)',
+                    lat: 48.8878,
+                    lng: 24.7214
+                },
+                {
+                    id: 4,
+                    city: 'Рівне',
+                    facility: 'Термінал (поштовий)',
+                    address: 'м. Рівне, Термінал (поштовий) (с. Вересневе, вул. 7-го Серпня, 31)',
+                    lat: 50.5925,
+                    lng: 26.1856
+                },
+                {
+                    id: 5,
+                    city: 'Вінниця',
+                    facility: 'Термінал (поштовий)',
+                    address: 'м. Вінниця, Термінал (поштовий) (Територія Стрижавської селищної ради, урочище Левада, буд. 2А)',
+                    lat: 49.2889,
+                    lng: 28.4811
+                },
+                {
+                    id: 6,
+                    city: 'Київ',
+                    facility: 'Депо №6',
+                    address: 'м. Київ, депо №6 (вул. Пирогівський шлях 34)',
+                    lat: 50.3652,
+                    lng: 30.5564
+                },
+                {
+                    id: 7,
+                    city: 'Київ',
+                    facility: 'Депо №4 (Слобожанська)',
+                    address: 'м. Київ, депо №4 (вул. Слобожанська, 13)',
+                    lat: 50.4355,
+                    lng: 30.3852
+                },
+                {
+                    id: 8,
+                    city: 'Київ',
+                    facility: 'Депо №2',
+                    address: 'м. Київ, депо №2 (вул. Вербова, 4а)',
+                    lat: 50.4892,
+                    lng: 30.4912
+                },
+                {
+                    id: 9,
+                    city: 'Чернігів',
+                    facility: 'Термінал (поштовий)',
+                    address: 'м. Чернігів, Термінал (вул. Підводника Китицина, 18)',
+                    lat: 51.5162,
+                    lng: 31.2651
+                },
+                {
+                    id: 10,
+                    city: 'Бориспіль',
+                    facility: 'Депо №1',
+                    address: 'м. Бориспіль, депо (вул. Запорізька, 36)',
+                    lat: 50.3451,
+                    lng: 30.9453
+                },
+                {
+                    id: 11,
+                    city: 'Черкаси',
+                    facility: 'Термінал (поштовий)',
+                    address: 'м. Черкаси, Термінал (посилковий) (с. Геронимівка, урочище "Щедре", зем.ділянка №4)',
+                    lat: 49.4582,
+                    lng: 31.9564
+                },
+                {
+                    id: 12,
+                    city: 'Полтава',
+                    facility: 'Термінал (поштовий)',
+                    address: 'м. Полтава, Термінал (автомобільна дорога М-03 Київ-Харків-Довжанський, км 330+921)',
+                    lat: 49.5705,
+                    lng: 34.4802
+                },
+                {
+                    id: 13,
+                    city: 'Дніпро',
+                    facility: 'Депо №1',
+                    address: 'м. Дніпро, депо №1 (вул. Повітряна, 2)',
+                    lat: 48.4682,
+                    lng: 34.9384
+                }
+            ];
+
+            const map = L.map('map', {
+                zoomControl: false,
+                scrollWheelZoom: true
+            }).setView([49.4, 30.0], 6);
+
+            L.control.zoom({ position: 'topleft' }).addTo(map);
+
+            const esriStreetLayer = L.tileLayer(
+                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+                {
+                    maxZoom: 19,
+                    attribution: 'Tiles &copy; Esri'
+                }
+            );
+
+            const esriGrayLayer = L.tileLayer(
+                'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+                {
+                    maxZoom: 16,
+                    attribution: 'Tiles &copy; Esri'
+                }
+            );
+
+            esriStreetLayer.addTo(map);
+
+            const routeCoords = locations.map(loc => [loc.lat, loc.lng]);
+
+            // Біла підкладка під сполучну лінію
+            L.polyline(routeCoords, {
+                color: '#ffffff',
+                weight: 7,
+                opacity: 0.75,
+                lineJoin: 'round',
+                lineCap: 'round'
+            }).addTo(map);
+
+            // Статична нейтральна пунктирна лінія без стрілок і анімації напрямку
+            const routeLine = L.polyline(routeCoords, {
+                color: '#4f46e5',
+                weight: 3.5,
+                opacity: 0.85,
+                dashArray: '10, 8',
+                lineJoin: 'round',
+                lineCap: 'round'
+            }).addTo(map);
+
+            const markersMap = new Map();
+            const cardsMap = new Map();
+            let activeId = null;
+
+            const sidebarContainer = document.getElementById('sidebar-scroll');
+            const fullAddressesGrid = document.getElementById('full-addresses-grid');
+
+            function getPointStyle(index, total) {
+                const isEdge = index === 0 || index === total - 1;
+                if (isEdge) {
+                    return {
+                        markerClass: 'marker-edge',
+                        badgeBg: 'bg-emerald-600',
+                        tagBg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                        tagLabel: `Точка №${index + 1}`
+                    };
+                }
+                return {
+                    markerClass: 'marker-mid',
+                    badgeBg: 'bg-indigo-600',
+                    tagBg: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                    tagLabel: `Точка №${index + 1}`
+                };
+            }
+
+            function setActiveLocation(id, shouldScrollSidebar = false) {
+                if (activeId !== null) {
+                    const prevCard = cardsMap.get(activeId);
+                    if (prevCard) {
+                        prevCard.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/70', 'border-indigo-200', 'shadow-sm');
+                        prevCard.classList.add('bg-white', 'border-slate-200/80');
+                    }
+                    const prevMarker = markersMap.get(activeId);
+                    if (prevMarker && prevMarker.getElement()) {
+                        prevMarker.getElement().classList.remove('marker-active');
+                    }
+                }
+
+                activeId = id;
+
+                if (id !== null) {
+                    const currCard = cardsMap.get(id);
+                    if (currCard) {
+                        currCard.classList.remove('bg-white', 'border-slate-200/80');
+                        currCard.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/70', 'border-indigo-200', 'shadow-sm');
+                        if (shouldScrollSidebar) {
+                            currCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }
+                    }
+                    const currMarker = markersMap.get(id);
+                    if (currMarker && currMarker.getElement()) {
+                        currMarker.getElement().classList.add('marker-active');
+                    }
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState(null, '', `#point=${id}`);
+                    }
+                } else {
+                    if (window.history && window.history.replaceState && window.location.hash) {
+                        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+                    }
+                }
+            }
+
+            locations.forEach((loc, index) => {
+                const style = getPointStyle(index, locations.length);
+                const isEdge = index === 0 || index === locations.length - 1;
+
+                const markerIcon = L.divIcon({
+                    className: `custom-div-icon ${style.markerClass}`,
+                    html: `<div class="marker-badge">${loc.id}</div>`,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16],
+                    popupAnchor: [0, -16]
+                });
+
+                const popupHtml = `
+                    <div class="p-4 bg-white">
+                        <div class="flex items-center justify-between gap-2 mb-2 pr-4">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${style.tagBg}">
+                                <span>${style.tagLabel}</span>
+                            </span>
+                        </div>
+                        <h3 class="text-base font-bold text-slate-900 leading-snug">${loc.city}</h3>
+                        <p class="text-xs font-semibold text-indigo-600 mt-0.5">${loc.facility}</p>
+                        <div class="mt-2.5 pt-2.5 border-t border-slate-100 flex items-start gap-2 text-xs text-slate-600 leading-relaxed">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span>${loc.address}</span>
+                        </div>
+                    </div>
+                `;
+
+                const marker = L.marker([loc.lat, loc.lng], {
+                    icon: markerIcon,
+                    zIndexOffset: isEdge ? 300 : 100
+                })
+                    .bindPopup(popupHtml, { maxWidth: 280 })
+                    .addTo(map);
+
+                marker.on('click', () => {
+                    setActiveLocation(loc.id, true);
+                });
+
+                markersMap.set(loc.id, marker);
+
+                const card = document.createElement('button');
+                card.type = 'button';
+                card.className = 'w-full text-left flex items-start gap-3 p-3 rounded-xl bg-white border border-slate-200/80 hover:border-indigo-300 hover:bg-indigo-50/30 transition-all duration-150 group focus:outline-none';
+                card.innerHTML = `
+                    <div class="flex-shrink-0 w-8 h-8 rounded-full ${style.badgeBg} text-white text-xs font-bold flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform mt-0.5">
+                        ${loc.id}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between gap-2">
+                            <h2 class="text-sm font-bold text-slate-900 truncate">${loc.city}</h2>
+                        </div>
+                        <p class="text-xs font-semibold text-indigo-600 mt-0.5">${loc.facility}</p>
+                        <p class="text-xs text-slate-500 mt-1 leading-relaxed">${loc.address}</p>
+                    </div>
+                `;
+
+                card.addEventListener('click', () => {
+                    focusLocation(loc.id, true, false);
+                });
+
+                sidebarContainer.appendChild(card);
+                cardsMap.set(loc.id, card);
+
+                // Картка у нижньому розділі повного списку адрес
+                const addrItem = document.createElement('button');
+                addrItem.type = 'button';
+                addrItem.className = 'w-full text-left flex items-start gap-3 p-3 rounded-xl bg-slate-50/80 hover:bg-indigo-50/50 border border-slate-200/80 hover:border-indigo-200 transition-colors';
+                addrItem.innerHTML = `
+                    <span class="flex-shrink-0 w-7 h-7 rounded-full ${style.badgeBg} text-white text-xs font-bold flex items-center justify-center mt-0.5">${loc.id}</span>
+                    <div class="min-w-0">
+                        <div class="text-xs font-bold text-slate-900">${loc.city} — <span class="text-indigo-600">${loc.facility}</span></div>
+                        <div class="text-xs text-slate-600 mt-0.5 leading-relaxed">${loc.address}</div>
+                    </div>
+                `;
+                addrItem.addEventListener('click', () => {
+                    document.getElementById('map-section').scrollIntoView({ behavior: 'smooth' });
+                    focusLocation(loc.id, true, true);
+                });
+                fullAddressesGrid.appendChild(addrItem);
+            });
+
+            // Пошук по списку точок
+            const searchInput = document.getElementById('search-input');
+            searchInput.addEventListener('input', () => {
+                const query = searchInput.value.trim().toLowerCase();
+                locations.forEach(loc => {
+                    const card = cardsMap.get(loc.id);
+                    if (!card) return;
+                    const haystack = `${loc.id} ${loc.city} ${loc.facility} ${loc.address}`.toLowerCase();
+                    card.style.display = !query || haystack.includes(query) ? '' : 'none';
+                });
+            });
+
+            function focusLocation(id, animate = true, scrollCard = true) {
+                const loc = locations.find(item => item.id === id);
+                const marker = markersMap.get(id);
+                if (!loc || !marker) return;
+
+                setActiveLocation(id, scrollCard);
+                const targetZoom = loc.city === 'Київ' ? 11 : 10;
+
+                if (animate) {
+                    map.flyTo([loc.lat, loc.lng], targetZoom, {
+                        animate: true,
+                        duration: 1.0
+                    });
+                    map.once('moveend', () => {
+                        marker.openPopup();
+                    });
+                } else {
+                    map.setView([loc.lat, loc.lng], targetZoom);
+                    marker.openPopup();
+                }
+            }
+
+            function fitAllRoute(animate = true) {
+                map.closePopup();
+                setActiveLocation(null, false);
+                map.fitBounds(routeLine.getBounds(), {
+                    padding: [48, 48],
+                    animate: animate,
+                    duration: 0.9
+                });
+            }
+
+            // Перевірка хешу URL (#point=N) при відкритті
+            const hashMatch = window.location.hash.match(/^#point=(\d+)$/);
+            if (hashMatch) {
+                const initialId = parseInt(hashMatch[1], 10);
+                if (locations.some(l => l.id === initialId)) {
+                    setTimeout(() => focusLocation(initialId, false, true), 150);
+                } else {
+                    fitAllRoute(false);
+                }
+            } else {
+                fitAllRoute(false);
+            }
+
+            document.getElementById('btn-map-reset').addEventListener('click', () => fitAllRoute(true));
+            document.getElementById('btn-sidebar-reset').addEventListener('click', () => fitAllRoute(true));
+
+            // Toast-повідомлення
+            let toastTimeout = null;
+            function showToast(message) {
+                const toast = document.getElementById('toast');
+                const toastMsg = document.getElementById('toast-message');
+                toastMsg.textContent = message;
+                toast.classList.remove('opacity-0', 'translate-y-2');
+                toast.classList.add('opacity-100', 'translate-y-0');
+
+                clearTimeout(toastTimeout);
+                toastTimeout = setTimeout(() => {
+                    toast.classList.remove('opacity-100', 'translate-y-0');
+                    toast.classList.add('opacity-0', 'translate-y-2');
+                }, 2600);
+            }
+
+            async function copyText(text, successMessage) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    showToast(successMessage);
+                } catch (err) {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    showToast(successMessage);
+                }
+            }
+
+            // Кнопка "Копіювати посилання"
+            document.getElementById('btn-share').addEventListener('click', async () => {
+                const shareUrl = window.location.href;
+                const activeLoc = activeId ? locations.find(l => l.id === activeId) : null;
+                const shareTitle = activeLoc
+                    ? `Точка №${activeLoc.id}: ${activeLoc.city} — ${activeLoc.facility}`
+                    : 'Мережа терміналів та депо (13 локацій)';
+
+                if (navigator.share && shareUrl.startsWith('http')) {
+                    try {
+                        await navigator.share({
+                            title: shareTitle,
+                            url: shareUrl
+                        });
+                        return;
+                    } catch (e) {
+                        if (e.name === 'AbortError') return;
+                    }
+                }
+                copyText(shareUrl, activeLoc ? `Посилання на точку №${activeLoc.id} скопійовано` : 'Посилання на карту скопійовано');
+            });
+
+            // Кнопки "Копіювати список адрес"
+            function copyAddressesList() {
+                const formattedList = [
+                    'Мережа терміналів та депо (13 локацій):',
+                    ...locations.map(l => `${l.id}. ${l.city} — ${l.facility}: ${l.address}`)
+                ].join('\n');
+                copyText(formattedList, 'Список усіх 13 адрес скопійовано');
+            }
+
+            document.getElementById('btn-copy-list').addEventListener('click', copyAddressesList);
+            document.getElementById('btn-copy-list-section').addEventListener('click', copyAddressesList);
+
+            // Перемикач стилю карти
+            const btnStreet = document.getElementById('btn-style-street');
+            const btnGray = document.getElementById('btn-style-gray');
+
+            function setMapStyle(styleName) {
+                if (styleName === 'street') {
+                    if (map.hasLayer(esriGrayLayer)) map.removeLayer(esriGrayLayer);
+                    if (!map.hasLayer(esriStreetLayer)) esriStreetLayer.addTo(map);
+
+                    btnStreet.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-indigo-600 text-white shadow-sm';
+                    btnGray.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-600 hover:bg-slate-100';
+                } else {
+                    if (map.hasLayer(esriStreetLayer)) map.removeLayer(esriStreetLayer);
+                    if (!map.hasLayer(esriGrayLayer)) esriGrayLayer.addTo(map);
+
+                    btnGray.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-indigo-600 text-white shadow-sm';
+                    btnStreet.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-600 hover:bg-slate-100';
+                }
+            }
+
+            btnStreet.addEventListener('click', () => setMapStyle('street'));
+            btnGray.addEventListener('click', () => setMapStyle('gray'));
+
+            const refreshMapSize = () => {
+                map.invalidateSize({ pan: false });
+            };
+
+            window.addEventListener('load', () => {
+                refreshMapSize();
+                setTimeout(() => {
+                    refreshMapSize();
+                    if (!hashMatch) fitAllRoute(false);
+                }, 250);
+            });
+
+            window.addEventListener('resize', () => {
+                refreshMapSize();
+            });
+        })();
+    </script>
+</body>
+</html>
